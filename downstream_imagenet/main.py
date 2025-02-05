@@ -6,18 +6,45 @@
 
 import datetime
 import time
-
+import numpy as np
 import torch
 import torch.distributed as tdist
 from timm.utils import ModelEmaV2
 from torch.utils.tensorboard import SummaryWriter
-
 from arg import get_args, FineTuneArgs
 from models import ConvNeXt, ResNet
 __for_timm_registration = ConvNeXt, ResNet
 from lr_decay import lr_wd_annealing
 from util import init_distributed_environ, create_model_opt, load_checkpoint, save_checkpoint
 from data import create_classification_dataset
+
+def compute_entropy_score(model):
+    input = torch.randn(64,3,224,224).cuda()
+    generalization_scores = []
+
+    with torch.no_grad():
+        feats = model.extract_features(input)
+        print(f'len of feats:{len(feats)}')
+        for i, feat in enumerate(feats):
+            feat = feat.detach().clone()
+            b,c,h,w = feat.size()
+            feat = feat.permute(0,2,3,1).contiguous().view(b*h*w,c)
+            m = feat.mean(dim=0, keepdim=True)
+            feat = feat - m
+            sigma = torch.mm(feat.transpose(1,0),feat) / (feat.size(0))
+            s = torch.linalg.eigvalsh(sigma) # faster version for computing eignevalues, can be adopted since sigma is symmetric
+            prob_s = s / s.sum()
+            score = (-prob_s)*torch.log(prob_s+1e-8)
+            score = score.sum().item()
+            # print(score)
+            generalization_scores.append(score)
+            # print(score*multiplier[i])
+            # generalization_scores.append(score*multiplier[i])
+
+        generalization_scores = np.array(generalization_scores)
+        entropy = np.sum(generalization_scores)
+
+        return 0.5*float(entropy) # 0.5 => scaler to make it comparable to ViT
 
 
 def main_ft():
@@ -27,6 +54,10 @@ def main_ft():
     args.log_epoch()
     
     criterion, mixup_fn, model_without_ddp, model, model_ema, optimizer = create_model_opt(args)
+
+    entropy_score = compute_entropy_score(model_without_ddp)
+    print(f'entropy_score:{entropy_score}')
+    exit()
     ep_start, performance_desc = load_checkpoint(args.resume_from, model_without_ddp, model_ema, optimizer)
     
     if ep_start >= args.ep: # load from a complete checkpoint file
