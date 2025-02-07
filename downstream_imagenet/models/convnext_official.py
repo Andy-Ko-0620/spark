@@ -33,7 +33,7 @@ class Block(nn.Module):
         self.gamma = nn.Parameter(layer_scale_init_value * torch.ones((dim)),
                                   requires_grad=True) if layer_scale_init_value > 0 else None
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
-    
+
     def forward(self, x):
         input = x
         x = self.dwconv(x)
@@ -103,7 +103,24 @@ class ConvNeXt(nn.Module):
         if isinstance(m, (nn.Conv2d, nn.Linear)):
             trunc_normal_(m.weight, std=.02)
             nn.init.constant_(m.bias, 0)
-    
+    def extract_features(self, x):
+        feats = []
+        for i in range(2):
+            x = self.downsample_layers[i](x)
+            x = self.stages[i](x)
+            # for layer in self.stages[i]:
+            #     print(f'layer:{layer}')
+            #     x = layer(x)
+
+        for i in range(2,4):
+            x = self.downsample_layers[i](x)
+            # x = self.stages[i](x)
+            # feats.append(x)
+            for layer in self.stages[i]:
+                print(f'layer:{layer}')
+                x = layer(x)
+                feats.append(x)
+        return feats 
     def forward_features(self, x):
         for i in range(4):
             x = self.downsample_layers[i](x)

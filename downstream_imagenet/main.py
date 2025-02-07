@@ -19,6 +19,7 @@ from util import init_distributed_environ, create_model_opt, load_checkpoint, sa
 from data import create_classification_dataset
 
 def compute_entropy_score(model):
+    
     input = torch.randn(64,3,224,224).cuda()
     generalization_scores = []
 
@@ -36,7 +37,7 @@ def compute_entropy_score(model):
             prob_s = s / s.sum()
             score = (-prob_s)*torch.log(prob_s+1e-8)
             score = score.sum().item()
-            # print(score)
+            print(score)
             generalization_scores.append(score)
             # print(score*multiplier[i])
             # generalization_scores.append(score*multiplier[i])
